@@ -1,0 +1,378 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+library(data.table)
+library(dplyr)
+library(VIM)
+library(DT)
+library(gridExtra)
+library(ggplot2)
+library(caret)
+library(Metrics)
+library(randomForest)
+library(pROC)
+library(e1071)
+#library(dtree)
+library(corrplot)
+library(DMwR2)
+```
+```{r}
+myData <- fread('./WA_Fn-UseC_-HR-Employee-Attrition.csv',sep = ',',header = TRUE,stringsAsFactors = TRUE)
+```
+
+```{r}
+names(myData)
+```
+```{r}
+glimpse(myData)
+```
+```{r}
+summary(myData)
+```
+```{r}
+apply(is.na(myData), 2, sum)
+VIM::aggr(myData)
+```
+```{r}
+cat("Data Set has ",dim(myData)[1], " Rows and ", dim(myData)[2], " Columns" )
+```
+```{r}
+myData$EmployeeNumber<- NULL
+myData$StandardHours <- NULL
+myData$Over18 <- NULL
+myData$EmployeeCount <- NULL
+cat("Data Set has ",dim(myData)[1], " Rows and ", dim(myData)[2], " Columns" )
+```
+Checking for Duplicate Record
+```{r}
+sum (is.na(duplicated(myData)))
+```
+
+Integer Variables -> Cateogorial Variables 
+```{r}
+myData$Education <- factor(myData$Education)
+myData$EnvironmentSatisfaction <- factor(myData$EnvironmentSatisfaction)
+myData$JobInvolvement <- factor(myData$JobInvolvement)
+myData$JobLevel <- factor(myData$JobLevel)
+myData$JobSatisfaction <- factor(myData$JobSatisfaction)
+myData$PerformanceRating <- factor(myData$PerformanceRating)
+myData$RelationshipSatisfaction <- factor(myData$RelationshipSatisfaction)
+myData$StockOptionLevel <- factor(myData$StockOptionLevel)
+myData$WorkLifeBalance <- factor(myData$WorkLifeBalance)
+```
+
+```{r}
+myData %>%
+        group_by(Attrition) %>%
+        tally() %>%
+        ggplot(aes(x = Attrition, y = n,fill=Attrition)) +
+        geom_bar(stat = "identity") +
+        theme_minimal()+
+        labs(x="Attrition", y="Count of Attriation")+
+        ggtitle("Attrition")+
+        geom_text(aes(label = n), vjust = -0.5, position = position_dodge(0.9))
+```
+As we see here, 237/1470=0.16 % of the data label shows the "Yes" in Attrition. this problem should be handeled during the process because unbalanced dataset will bias the prediction model towards the more common class (here is 'NO').
+
+```{r}
+ggplot(data=myData, aes(myData$Age)) + 
+        geom_histogram(breaks=seq(20, 50, by=2), 
+                       col="red", 
+                       aes(fill=..count..))+
+        labs(x="Age", y="Count")+
+        scale_fill_gradient("Count", low="green", high="red")
+```
+As we see above, the majority of employees are between 28-36 years. 34-36 years old are very popolar.
+
+```{r}
+a1 <- myData %>%
+        group_by(BusinessTravel) %>%
+        tally() %>%
+        ggplot(aes(x = BusinessTravel, y = n,fill=BusinessTravel)) +
+        geom_bar(stat = "identity") +
+        theme_minimal()+
+        labs(x="Business Travel", y="Number Attriation")+
+        ggtitle("Attrition according to the Business Travel")+
+        geom_text(aes(label = n), vjust = -0.5, position = position_dodge(0.9))
+
+a2<- myData %>%
+        group_by(BusinessTravel, Attrition) %>%
+        tally() %>%
+        ggplot(aes(x = BusinessTravel, y = n,fill=Attrition)) +
+        geom_bar(stat = "identity") +
+        theme_minimal()+
+        labs(x="Business Travel", y="Number Attriation")+
+        ggtitle("Attrition according to the Business Travel")+
+        geom_text(aes(label = n), vjust = -0.5, position = position_dodge(0.9))
+
+
+grid.arrange(a1,a2)
+```
+The distribution of the data according to the Business Tralvel situation. more than 70% of employees travel rarely where just 10 % of them has no travel.
+
+```{r}
+myData %>%
+        ggplot(aes(x = BusinessTravel, group = Attrition)) + 
+        geom_bar(aes(y = ..prop.., fill = factor(..x..)), 
+                 stat="count", 
+                 alpha = 0.7) +
+        geom_text(aes(label = scales::percent(..prop..), y = ..prop.. ), 
+                  stat= "count", 
+                  vjust = 2) +
+        labs(y = "Percentage", fill= "business Travel") +
+        facet_grid(~Attrition) +
+        theme_minimal()+
+        theme(legend.position = "none", plot.title = element_text(hjust = 0.5)) + 
+        ggtitle("Attrition")
+```
+```{r}
+g1 <- myData %>%
+        group_by(Department) %>%
+        tally() %>%
+        ggplot(aes(x = Department, y = n,fill=Department)) +
+        geom_bar(stat = "identity") +
+        theme_minimal()+
+        geom_text(aes(label = n), vjust = -0.1, position = position_dodge(0.9))
+
+g2 <- myData %>%
+        group_by(Department, Attrition) %>%
+        tally() %>%
+        ggplot(aes(x = Department, y = n,fill=Attrition)) +
+        geom_bar(stat = "identity") +
+        theme_minimal()+
+        geom_text(aes(label = n), vjust = -0.1, position = position_dodge(0.9))
+
+grid.arrange(g1,g2)
+
+
+```
+
+```{r}
+g1<- myData %>%
+        ggplot(aes(x = Education, group = Attrition)) + 
+        geom_bar(aes(y = ..prop.., fill = factor(..x..)), 
+                 stat="count", 
+                 alpha = 0.7) +
+        geom_text(aes(label = scales::percent(..prop..), y = ..prop.. ), 
+                  stat= "count", 
+                  vjust = 2) +
+        labs(y = "Percentage", fill= "Education") +
+        facet_grid(~Attrition) +
+        theme_minimal()+
+        theme(legend.position = "none", plot.title = element_text(hjust = 0.5)) + 
+        ggtitle("Attrition")
+
+g2<- myData %>%
+        group_by(Education, Attrition) %>%
+        tally() %>%
+        ggplot(aes(x = Education, y = n,fill=Attrition)) +
+        geom_bar(stat = "identity") +
+        theme_minimal()+
+        geom_text(aes(label = n), vjust = -0.5, position = position_dodge(0.9))+
+        labs(x="Education", y="Number Attriation")+
+        ggtitle("Attrition in regards to Education Level")
+
+grid.arrange(g1,g2)
+```
+
+```{r}
+myData %>%
+        ggplot(aes(x = Gender, group = Attrition)) + 
+        geom_bar(aes(y = ..prop.., fill = factor(..x..)), 
+                 stat="count", 
+                 alpha = 0.7) +
+        geom_text(aes(label = scales::percent(..prop..), y = ..prop.. ), 
+                  stat= "count", 
+                  vjust = -.5) +
+        labs(y = "Percentage", fill= "Gender") +
+        facet_grid(~Attrition) +
+        theme_minimal()+
+        theme(legend.position = "none", plot.title = element_text(hjust = 0.5)) + 
+        ggtitle("Attrition")
+```
+
+```{r}
+myData %>%
+        ggplot(aes(x = MaritalStatus, group = Attrition)) + 
+        geom_bar(aes(y = ..prop.., fill = factor(..x..)), 
+                 stat="count", 
+                 alpha = 0.7) +
+        geom_text(aes(label = scales::percent(..prop..), y = ..prop.. ), 
+                  stat= "count", 
+                  vjust = -.5) +
+        labs(y = "Percentage", fill= "MaritalStatus") +
+        facet_grid(~Attrition) +
+        theme_minimal()+
+        theme(legend.position = "none", plot.title = element_text(hjust = 0.5)) + 
+        ggtitle("Attrition")
+```
+
+```{r}
+myData %>%
+        ggplot(mapping = aes(x = MonthlyIncome)) + 
+        geom_histogram(aes(fill = Attrition), bins=20)+
+        labs(x="Monthlt Income", y="Number Attriation")+
+        ggtitle("Attrition in regards to Monthly Income")
+```
+```{r}
+g1 <-myData %>%
+        ggplot(aes(x = OverTime, group = Attrition)) + 
+        geom_bar(aes(y = ..prop.., fill = factor(..x..)), 
+                 stat="count", 
+                 alpha = 0.7) +
+        geom_text(aes(label = scales::percent(..prop..), y = ..prop.. ), 
+                  stat= "count", 
+                  vjust = 0.3) +
+        labs(y = "Percentage", fill= "OverTime") +
+        facet_grid(~Attrition) +
+        theme_minimal()+
+        theme(legend.position = "none", plot.title = element_text(hjust = 0.3)) + 
+        ggtitle("Attrition")
+
+
+g2 <-myData %>%
+        group_by(OverTime, Attrition) %>%
+        tally() %>%
+        ggplot(aes(x = OverTime, y = n,fill=Attrition)) +
+        geom_bar(stat = "identity") +
+        theme_minimal()+
+        geom_text(aes(label = n), vjust = -0.3, position = position_dodge(0.9))+
+        labs(x="Over time", y="Number Attriation")+
+        ggtitle("Attrition in regards to Over time")
+
+grid.arrange(g1,g2)
+```
+
+```{r}
+g1<-myData %>%
+        ggplot(aes(x = WorkLifeBalance, group = Attrition)) + 
+        geom_bar(aes(y = ..prop.., fill = factor(..x..)), 
+                 stat="count", 
+                 alpha = 0.7) +
+        geom_text(aes(label = scales::percent(..prop..), y = ..prop.. ), 
+                  stat= "count", 
+                  vjust = -.5) +
+        labs(y = "Percentage", fill= "WorkLifeBalance") +
+        facet_grid(~Attrition) +
+        theme_minimal()+
+        theme(legend.position = "none", plot.title = element_text(hjust = 0.5)) + 
+        ggtitle("Attrition")
+
+g2<- myData %>%
+        group_by(WorkLifeBalance, Attrition) %>%
+        tally() %>%
+        ggplot(aes(x = WorkLifeBalance, y = n,fill=Attrition)) +
+        geom_bar(stat = "identity") +
+        theme_minimal()+
+        geom_text(aes(label = n), vjust = -0.5, position = position_dodge(0.9))+
+        labs(x="  Work Life Balance", y="Number Attriation")+
+        ggtitle("Attrition in regards to  Work Life Balance")
+grid.arrange(g1,g2)
+```
+-----------------------------Using Raw data by RF-----------------------------
+At the first Stage we use RF for getting some information about the prediction split Data to Train and Test:
+
+```{r}
+rfData <- myData
+set.seed(123)
+indexes = sample(1:nrow(rfData), size=0.8*nrow(rfData))
+RFRaw.train.Data <- rfData[indexes,]
+RFRaw.test.Data <- rfData[-indexes,]
+```
+
+Builidng the model
+```{r}
+Raw.rf.model <- randomForest(Attrition~.,RFRaw.train.Data, importance=TRUE,ntree=1000)
+```
+
+```{r}
+varImpPlot(Raw.rf.model)
+```
+As we see here, Over time, Age, MonthlyIncome, Jobrole and TotalWorkingYears are top five variables.
+
+```{r}
+Raw.rf.prd <- predict(Raw.rf.model, newdata = RFRaw.test.Data)
+confusionMatrix(RFRaw.test.Data$Attrition, Raw.rf.prd)
+```
+```{r}
+Raw.rf.plot<- plot.roc(as.numeric(RFRaw.test.Data$Attrition), as.numeric(Raw.rf.prd),lwd=2, type="b",print.auc=TRUE,col ="blue")
+```
+
+Acc = 0.8639 which is very good result but not anough measure. We see that the AUC is poor.
+
+--------------------------------------------Decision Tree--------------------------------------------
+
+```{r}
+DtData <- myData
+set.seed(123)
+indexes = sample(1:nrow(DtData), size=0.8*nrow(DtData))
+DTtrain.Data <- DtData[indexes,]
+DTtest.Data <- DtData[-indexes,]
+
+dtree.model <- tree::tree (Attrition ~., data = DTtrain.Data)
+plot(dtree.model)
+text(dtree.model, all = T)
+
+dtree.prd <- predict(dtree.model, DTtest.Data, type = "class")
+confusionMatrix(dtree.prd,DTtest.Data$Attrition)
+```
+
+```{r}
+dtree.plot <- plot.roc (as.numeric(DTtest.Data$Attrition), as.numeric(dtree.prd),lwd=2, type="b", print.auc=TRUE, col ="blue")
+```
+ Accuracy is 0.823 where AUC is 0.608
+ 
+ --------------------------------------------Feature Engineering--------------------------------------------
+ Making Age Group 18-24 = Young , 25-54=Middle-Age , 54-120= Adult
+```{r}
+myData$AgeGroup <- as.factor(
+        ifelse(myData$Age<=24,"Young", ifelse(
+        myData$Age<=54,"Middle-Age","Adult"
+        ))
+)
+table(myData$AgeGroup)
+```
+Totla Satisfaction the total of the satisfaction from Job, Environment, etc.
+```{r}
+myData$TotlaSatisfaction <- 
+        as.numeric(myData$EnvironmentSatisfaction)+
+        as.numeric(myData$JobInvolvement)+
+        as.numeric(myData$JobSatisfaction)+
+        as.numeric(myData$RelationshipSatisfaction)+
+        as.numeric(myData$WorkLifeBalance)
+
+summary(myData$TotlaSatisfaction)
+```
+Study Years for getting Education Level certificate
+```{r}
+table(myData$Education)
+```
+
+```{r}
+myData$YearsEducation <-  ifelse(myData$Education==1,10,ifelse(myData$Education==2,12,
+        ifelse(myData$Education==3,16,ifelse(myData$Education==4,18,22))))  
+
+table(myData$YearsEducation)
+
+```
+The majority of employee are 16 years education (Bachelor)
+
+Less or more than average Monthly Income We calculate the average income and generate the level of incom(High or Low)
+```{r}
+myData$IncomeLevel <- as.factor(
+        ifelse(myData$MonthlyIncome<ave(myData$MonthlyIncome),"Low","High")
+)
+table(myData$IncomeLevel)
+```
+
+```{r}
+corrplot(cor(sapply(myData,as.integer)),method = "pie")
+```
+We can see some of variables are high correlated
+Eg. JobLevel and MonthlyIncome
+    Education and YearsEducation
+They cause multicollinearity problem.
