@@ -1,0 +1,1 @@
+Employee Attrition Prediction & Well-being Enhancement, Data Analysis using XGBoost, SVM, and Decision Trees. Employed advanced ML, providing actionable insights for significant attrition reduction and employee well-being improvement 
